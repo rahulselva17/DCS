@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Task Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 2rem;
+            background-color: #f9f9f9;
+        }
+        .card {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .card h2 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        .value {
+            font-weight: bold;
+            font-size: 1.25rem;
+            color: #2a7ae2;
+        }
+        table {
+            width: 90%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ccc;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        h2 {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Task Dashboard</h1>
+
+    <div class="card">
+        <h2>Active Workers: <span class="value" id="worker-count">Loading...</span></h2>
+    </div>
+    <div class="card">
+        <h2>Current Queue Size: <span class="value" id="queue-size">Loading...</span></h2>
+    </div>
+    <div class="card">
+        <h2>Processing Tasks: <span class="value" id="processing-count">Loading...</span></h2>
+    </div>
+    <div class="card">
+        <h2>Completed Tasks: <span class="value" id="completed-count">Loading...</span></h2>
+    </div>
+
+    <h2>Completed Tasks</h2>
+    <div id="completed-tasks-container">
+        <p style="text-align:center;">Loading completed tasks...</p>
+    </div>
+
+    <script>
+        async function loadDashboard() {
+            try {
+                const response = await fetch('/api/data');
+                const data = await response.json();
+
+                document.getElementById('worker-count').textContent = data.worker_count;
+                document.getElementById('queue-size').textContent = data.processing_tasks.length;
+                document.getElementById('processing-count').textContent = data.processing_tasks.length;
+                document.getElementById('completed-count').textContent = data.completed_tasks.length;
+
+                renderCompletedTasks(data.completed_tasks);
+            } catch (error) {
+                console.error("Error loading dashboard data:", error);
+                document.getElementById('completed-tasks-container').innerHTML =
+                    "<p style='text-align:center;color:red;'>Failed to load completed tasks.</p>";
+            }
+        }
+
+        function renderCompletedTasks(tasks) {
+            const container = document.getElementById('completed-tasks-container');
+            container.innerHTML = '';
+
+            if (!tasks || tasks.length === 0) {
+                container.innerHTML = '<p style="text-align:center;">No completed tasks found.</p>';
+                return;
+            }
+
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const tbody = document.createElement('tbody');
+
+            const headers = Object.keys(tasks[0]);
+            const headerRow = document.createElement('tr');
+            headers.forEach(key => {
+                const th = document.createElement('th');
+                th.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+
+            tasks.forEach(task => {
+                const row = document.createElement('tr');
+                headers.forEach(key => {
+                    const td = document.createElement('td');
+                    td.textContent = task[key];
+                    row.appendChild(td);
+                });
+                tbody.appendChild(row);
+            });
+
+            table.appendChild(thead);
+            table.appendChild(tbody);
+            container.appendChild(table);
+        }
+
+        loadDashboard();
+        setInterval(loadDashboard, 5000);  // Refresh every 5 seconds
+    </script>
+</body>
+</html>

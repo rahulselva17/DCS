@@ -2,42 +2,56 @@ import pika
 import threading
 import time
 import json
+import os
 
 RABBITMQ_HOST = 'localhost'
-active_worker_threads = []  # Track active workers
-worker_lock = threading.Lock()  # To manage worker creation and removal safely
-worker_stop_event = threading.Event()  # Event to signal workers to stop
+active_worker_threads = []
+worker_lock = threading.Lock()
+worker_stop_event = threading.Event()
+
+# Ensure the tracking files exist
+def initialize_files():
+    for file in ['processing_tasks.json', 'completed_tasks.json', 'worker_count.txt']:
+        if not os.path.exists(file):
+            with open(file, 'w') as f:
+                if 'txt' in file:
+                    f.write('0')
+                else:
+                    pass  # Empty JSON lines file
 
 # Function to simulate a worker
 def worker_function(worker_id):
     def callback(ch, method, properties, body):
         try:
             task = json.loads(body)
+            tasks = task if isinstance(task, list) else [task]
 
-            # Handle list of tasks or single task
-            if isinstance(task, list):
-                for t in task:
-                    print(f"[Worker {worker_id}] Processing task:")
-                    for k, v in t.items():
-                        print(f"  {k}: {v}")
-                    size = t.get('size', 1)
-                    print(f"[Worker {worker_id}] Simulating work for {size} second(s)...")
-                    time.sleep(size)
-                    print(f"[Worker {worker_id}] Task complete.")
-                    print("-" * 30)
+            for t in tasks:
+                # Log to processing_tasks.json
+                with open('processing_tasks.json', 'a') as f:
+                    f.write(json.dumps(t) + '\n')
 
-            elif isinstance(task, dict):
                 print(f"[Worker {worker_id}] Processing task:")
-                for k, v in task.items():
+                for k, v in t.items():
                     print(f"  {k}: {v}")
-                size = task.get('size', 1)
+                size = t.get('size', 1)
                 print(f"[Worker {worker_id}] Simulating work for {size} second(s)...")
                 time.sleep(size)
                 print(f"[Worker {worker_id}] Task complete.")
                 print("-" * 30)
 
-            else:
-                print(f"[Worker {worker_id}] Unexpected task format: {type(task)}")
+                # Log to completed_tasks.json
+                with open('completed_tasks.json', 'a') as f:
+                    f.write(json.dumps(t) + '\n')
+
+            # Remove processed tasks from processing_tasks.json
+            try:
+                with open('processing_tasks.json', 'r') as f:
+                    lines = f.readlines()
+                with open('processing_tasks.json', 'w') as f:
+                    f.writelines([line for line in lines if json.loads(line.strip()) not in tasks])
+            except Exception as e:
+                print(f"[Worker {worker_id}] Error updating processing_tasks.json: {e}")
 
             ch.basic_ack(delivery_tag=method.delivery_tag)
 
@@ -73,10 +87,8 @@ def monitor_queue():
         queue_length = queue.method.message_count
         print(f"[Manager] Queue length: {queue_length} | Active workers: {len(active_worker_threads)}")
 
-        # Dynamically scale worker threads
         with worker_lock:
             if queue_length > len(active_worker_threads) and len(active_worker_threads) < 10:
-                # Add new worker
                 new_worker_thread = threading.Thread(
                     target=worker_function,
                     args=(len(active_worker_threads) + 1,),
@@ -87,17 +99,19 @@ def monitor_queue():
                 print(f"[Manager] Added new worker. Total workers: {len(active_worker_threads)}")
 
             elif queue_length == 0 and len(active_worker_threads) > 1:
-                # Stop workers if queue is empty
                 print("[Manager] Queue is empty. Stopping idle workers.")
-                worker_stop_event.set()  # Signal workers to stop
+                worker_stop_event.set()
                 active_worker_threads.clear()
+
+            with open("worker_count.txt", "w") as f:
+                f.write(str(len(active_worker_threads)))
 
         time.sleep(3)
 
 if __name__ == '__main__':
-    num_workers = 3
+    initialize_files()
 
-    # Start initial workers
+    num_workers = 3
     for i in range(num_workers):
         thread = threading.Thread(target=worker_function, args=(i + 1,), daemon=True)
         thread.start()

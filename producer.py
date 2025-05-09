@@ -10,7 +10,7 @@ def send_task_to_scheduler():
 
     priorities = ["high", "medium", "low"]
     
-    for i in range(1, 11):
+    for i in range(1, 21):
         task = {
             'task_id': i,
             'priority': priorities[i % 3],
